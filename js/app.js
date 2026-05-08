@@ -4,6 +4,7 @@ function App() {
     const [patterns, setPatterns] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState(window.EMPTY_FORM);
+    const [projectFileName, setProjectFileName] = useState("zadania");
 
     const listRef = useRef(null);
     const sortableRef = useRef(null);
@@ -23,13 +24,20 @@ function App() {
     }, [patterns.length]);
 
     function handleChange(e) {
-        const { name, value, type, checked } = e.target;
+    const { name, value, type, checked } = e.target;
 
-        setFormData({
-            ...formData,
-            [name]: type === "checkbox" ? checked : value
-        });
+    let newValue = type === "checkbox" ? checked : value;
+
+    // 🔥 kľúčová úprava
+    if (name === "patternString") {
+        newValue = String(value).toUpperCase();
     }
+
+    setFormData({
+        ...formData,
+        [name]: newValue
+    });
+}
 
     function handleImage(e, key) {
         const file = e.target.files[0];
@@ -82,20 +90,49 @@ function App() {
         return out;
     }
 
+    function pickRandomHiddenIndices(sequenceLength) {
+        if (sequenceLength <= 0) return [];
+
+        const ratio = 0.10 + Math.random() * 0.05;
+        let count = Math.floor(sequenceLength * ratio);
+
+        if (sequenceLength > 3 && count < 1) {
+            count = 1;
+        }
+
+        const indices = [];
+        const used = new Set();
+
+        while (indices.length < count) {
+            const idx = Math.floor(Math.random() * sequenceLength);
+
+            if (!used.has(idx)) {
+                used.add(idx);
+                indices.push(idx);
+            }
+        }
+
+        return indices.sort((a, b) => a - b);
+    }
+
     function randomizeForm() {
         const nextType = randomChoice(["konstantny", "rastuci"]);
         const nextPattern = randomPatternString();
+        const nextRepeat = 1 + Math.floor(Math.random() * 5);
+        const nextStartEnabled = randomBool();
+        const nextStartValue = randomChoice(["A", "B", "C"]);
+        const nextEndEnabled = randomBool();
+        const nextEndValue = randomChoice(["A", "B", "C"]);
 
         const updated = {
             ...formData,
             type: nextType,
             patternString: nextPattern,
-            repeat: 1 + Math.floor(Math.random() * 5),
-            startEnabled: randomBool(),
-            startValue: randomChoice(["A", "B", "C"]),
-            endEnabled: randomBool(),
-            endValue: randomChoice(["A", "B", "C"]),
-            hiddenIndices: []
+            repeat: nextRepeat,
+            startEnabled: nextStartEnabled,
+            startValue: nextStartValue,
+            endEnabled: nextEndEnabled,
+            endValue: nextEndValue
         };
 
         if (nextType === "rastuci") {
@@ -112,6 +149,9 @@ function App() {
             updated.growC = false;
         }
 
+        const sequence = window.buildSequence(updated);
+        updated.hiddenIndices = pickRandomHiddenIndices(sequence.length);
+
         setFormData(updated);
     }
 
@@ -126,7 +166,7 @@ function App() {
             return;
         }
 
-        if (!/^[ABC]+$/.test(formData.patternString)) {
+        if (!/^[ABCabc]+$/.test(formData.patternString)) {
             alert("Vzor môže obsahovať iba písmená A, B, C.");
             return;
         }
@@ -154,6 +194,7 @@ function App() {
             ...pattern,
             hiddenIndices: Array.isArray(pattern.hiddenIndices) ? pattern.hiddenIndices : []
         });
+
         setShowForm(true);
     }
 
@@ -163,6 +204,7 @@ function App() {
 
     function handleLoadClick() {
         const input = document.getElementById("jsonFileInput");
+
         if (input) {
             input.click();
         }
@@ -170,6 +212,11 @@ function App() {
 
     function handleLoadFile(e) {
         const file = e.target.files[0];
+
+        if (file && file.name) {
+            const withoutExtension = file.name.replace(/\.json$/i, "");
+            setProjectFileName(withoutExtension || "zadania");
+        }
 
         window.loadPatternsFromJSON(
             file,
@@ -182,6 +229,22 @@ function App() {
                 e.target.value = "";
             }
         );
+    }
+
+    function handleSaveJSON() {
+        const inputName = prompt("Zadaj názov JSON súboru:", projectFileName || "zadania");
+
+        if (inputName === null) return;
+
+        const trimmed = inputName.trim();
+        const finalName = trimmed ? trimmed : "zadania";
+
+        setProjectFileName(finalName);
+        window.savePatternsToJSON(patterns, finalName);
+    }
+
+    function handleExportHTML() {
+        window.exportPatternsToHTML(patterns, projectFileName || "zadania");
     }
 
     return html`
@@ -201,7 +264,7 @@ function App() {
 
                 <button
                     className="btn btn-success"
-                    onClick=${() => window.savePatternsToJSON(patterns)}
+                    onClick=${handleSaveJSON}
                 >
                     💾 Ulož
                 </button>
@@ -215,7 +278,7 @@ function App() {
 
                 <button
                     className="btn btn-warning"
-                    onClick=${() => window.exportPatternsToHTML(patterns)}
+                    onClick=${handleExportHTML}
                 >
                     🌍 Export
                 </button>
