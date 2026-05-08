@@ -1,35 +1,11 @@
 const { useState, useRef, useEffect } = React;
 
 function App() {
-    const emptyForm = {
-        id: null,
-        name: "",
-        type: "konstantny",
-        patternString: "ABC",
-
-        growA: false,
-        growB: false,
-        growC: false,
-
-        imageA: null,
-        imageB: null,
-        imageC: null,
-
-        repeat: 3,
-
-        startEnabled: false,
-        startValue: "A",
-
-        endEnabled: false,
-        endValue: "A"
-    };
-
     const [patterns, setPatterns] = useState([]);
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState(emptyForm);
+    const [formData, setFormData] = useState(window.EMPTY_FORM);
 
     const listRef = useRef(null);
-    const fileLoadRef = useRef(null);
     const sortableRef = useRef(null);
 
     const fileRefs = {
@@ -38,281 +14,13 @@ function App() {
         C: useRef(null)
     };
 
-    /* ---------------- DRAG & DROP ---------------- */
-
     useEffect(() => {
-        if (!listRef.current) return;
-
-        if (sortableRef.current) {
-            sortableRef.current.destroy();
-        }
-
-        sortableRef.current = new Sortable(listRef.current, {
-            animation: 150,
-            draggable: ".sortable-item",
-            handle: ".drag-handle",
-            onEnd: (evt) => {
-                if (evt.oldIndex === evt.newIndex) return;
-
-                setPatterns((prev) => {
-                    const updated = [...prev];
-                    const [moved] = updated.splice(evt.oldIndex, 1);
-                    updated.splice(evt.newIndex, 0, moved);
-                    return updated;
-                });
-            }
-        });
+        window.attachSortable(listRef.current, setPatterns, sortableRef);
 
         return () => {
-            if (sortableRef.current) {
-                sortableRef.current.destroy();
-                sortableRef.current = null;
-            }
+            window.destroySortable(sortableRef);
         };
     }, [patterns.length]);
-
-    /* ---------------- PREVIEW ---------------- */
-
-    function generatePreview(pattern) {
-        if (!pattern.patternString) return null;
-
-        const images = {
-            A: pattern.imageA,
-            B: pattern.imageB,
-            C: pattern.imageC
-        };
-
-        let sequence = [];
-
-        if (pattern.startEnabled) {
-            sequence.push(pattern.startValue);
-        }
-
-        for (let r = 0; r < Number(pattern.repeat || 0); r++) {
-            for (let char of pattern.patternString) {
-                sequence.push(char);
-            }
-        }
-
-        if (pattern.endEnabled) {
-            sequence.push(pattern.endValue);
-        }
-
-        return sequence.map((char, i) => {
-            const src = images[char];
-
-            if (src) {
-                return (
-                    <img
-                        key={i}
-                        src={src}
-                        alt={char}
-                        style={{
-                            height: 50,
-                            marginRight: 10
-                        }}
-                    />
-                );
-            }
-
-            return (
-                <div
-                    key={i}
-                    style={{
-                        height: 50,
-                        width: 50,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontWeight: "bold",
-                        fontSize: "18px",
-                        border: "1px dashed #aaa",
-                        marginRight: 10
-                    }}
-                >
-                    {char}
-                </div>
-            );
-        });
-    }
-
-    /* ---------------- SAVE JSON ---------------- */
-
-    function saveToJSON() {
-        const exportData = {
-            zadania: patterns.map((p, i) => ({
-                id: i + 1,
-                meno_zadania: p.name,
-                typ_vzoru: p.patternString,
-                obrazok_A: p.imageA,
-                obrazok_B: p.imageB,
-                obrazok_C: p.imageC,
-                pocet_opakovani: Number(p.repeat || 0),
-                startEnabled: !!p.startEnabled,
-                startValue: p.startValue || "A",
-                endEnabled: !!p.endEnabled,
-                endValue: p.endValue || "A"
-            }))
-        };
-
-        const blob = new Blob(
-            [JSON.stringify(exportData, null, 2)],
-            { type: "application/json" }
-        );
-
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "zadania.json";
-        link.click();
-        URL.revokeObjectURL(link.href);
-    }
-
-    /* ---------------- LOAD JSON ---------------- */
-
-    function loadFromJSON(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-
-        reader.onload = () => {
-            try {
-                const text = String(reader.result).replace(/^\uFEFF/, "").trim();
-                const data = JSON.parse(text);
-
-                if (!data.zadania || !Array.isArray(data.zadania)) {
-                    alert("Neplatný formát JSON.");
-                    return;
-                }
-
-                const imported = data.zadania.map((z) => ({
-                    id: Date.now() + Math.random(),
-                    name: z.meno_zadania || "",
-                    type: "konstantny",
-                    patternString: z.typ_vzoru || "ABC",
-
-                    growA: false,
-                    growB: false,
-                    growC: false,
-
-                    imageA: z.obrazok_A || null,
-                    imageB: z.obrazok_B || null,
-                    imageC: z.obrazok_C || null,
-
-                    repeat: z.pocet_opakovani || 3,
-
-                    startEnabled: !!z.startEnabled,
-                    startValue: z.startValue || "A",
-
-                    endEnabled: !!z.endEnabled,
-                    endValue: z.endValue || "A"
-                }));
-
-                setPatterns(imported);
-                e.target.value = "";
-            } catch (err) {
-                console.error("Chyba pri načítaní JSON:", err);
-                alert("Chyba: súbor nie je platný JSON.");
-            }
-        };
-
-        reader.readAsText(file);
-    }
-
-    /* ---------------- EXPORT HTML ---------------- */
-
-    function exportHTML() {
-        let html = `
-<!DOCTYPE html>
-<html lang="sk">
-<head>
-    <meta charset="UTF-8">
-    <title>Zadania</title>
-</head>
-<body>
-    <h2>Zadania</h2>
-`;
-
-        patterns.forEach((p, index) => {
-            html += `<div style="margin-bottom:24px;">`;
-            html += `<h3>${index + 1}. ${escapeHtml(p.name)}</h3>`;
-            html += generatePreviewHTML(p);
-            html += `</div><hr>`;
-        });
-
-        html += `
-</body>
-</html>`;
-
-        const blob = new Blob([html], { type: "text/html" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "zadania.html";
-        link.click();
-        URL.revokeObjectURL(link.href);
-    }
-
-    function generatePreviewHTML(pattern) {
-        let result = "";
-
-        const getImage = (letter) => pattern["image" + letter];
-        let sequence = [];
-
-        if (pattern.startEnabled) {
-            sequence.push(pattern.startValue);
-        }
-
-        for (let r = 0; r < Number(pattern.repeat || 0); r++) {
-            for (let char of pattern.patternString) {
-                sequence.push(char);
-            }
-        }
-
-        if (pattern.endEnabled) {
-            sequence.push(pattern.endValue);
-        }
-
-        sequence.forEach((char) => {
-            const img = getImage(char);
-
-            if (img) {
-                result += `
-<img
-    src="${img}"
-    alt="${char}"
-    height="50"
-    style="margin-right:10px;"
->`;
-            } else {
-                result += `
-<span style="
-    display:inline-flex;
-    width:40px;
-    height:40px;
-    align-items:center;
-    justify-content:center;
-    font-weight:bold;
-    border:1px dashed #aaa;
-    margin-right:10px;
-">
-    ${escapeHtml(char)}
-</span>`;
-            }
-        });
-
-        return `<div style="display:flex;flex-wrap:wrap;align-items:center;">${result}</div>`;
-    }
-
-    function escapeHtml(text) {
-        return String(text)
-            .replaceAll("&", "&amp;")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;")
-            .replaceAll('"', "&quot;")
-            .replaceAll("'", "&#039;");
-    }
-
-    /* ---------------- FORM ---------------- */
 
     function handleChange(e) {
         const { name, value, type, checked } = e.target;
@@ -330,16 +38,113 @@ function App() {
         const reader = new FileReader();
 
         reader.onload = () => {
+            const nameKey = key + "Name";
+
             setFormData({
                 ...formData,
-                [key]: reader.result
+                [key]: reader.result,
+                [nameKey]: file.name
             });
         };
 
         reader.readAsDataURL(file);
     }
 
-    /* ---------------- CRUD ---------------- */
+    function toggleHiddenIndex(index) {
+        const current = Array.isArray(formData.hiddenIndices) ? formData.hiddenIndices : [];
+        const exists = current.includes(index);
+
+        setFormData({
+            ...formData,
+            hiddenIndices: exists
+                ? current.filter((i) => i !== index)
+                : [...current, index].sort((a, b) => a - b)
+        });
+    }
+
+    function randomChoice(items) {
+        return items[Math.floor(Math.random() * items.length)];
+    }
+
+    function randomBool() {
+        return Math.random() < 0.5;
+    }
+
+    function randomPatternString() {
+        const letters = ["A", "B", "C"];
+        const len = 2 + Math.floor(Math.random() * 3);
+        let out = "";
+
+        for (let i = 0; i < len; i++) {
+            out += randomChoice(letters);
+        }
+
+        return out;
+    }
+
+    function pickRandomHiddenIndices(sequenceLength) {
+        if (sequenceLength <= 0) return [];
+
+        const ratio = 0.10 + Math.random() * 0.05;
+        let count = Math.floor(sequenceLength * ratio);
+
+        if (sequenceLength > 3 && count < 1) {
+            count = 1;
+        }
+
+        const indices = [];
+        const used = new Set();
+
+        while (indices.length < count) {
+            const idx = Math.floor(Math.random() * sequenceLength);
+            if (!used.has(idx)) {
+                used.add(idx);
+                indices.push(idx);
+            }
+        }
+
+        return indices.sort((a, b) => a - b);
+    }
+
+    function randomizeForm() {
+        const nextType = randomChoice(["konstantny", "rastuci"]);
+        const nextPattern = randomPatternString();
+        const nextRepeat = 1 + Math.floor(Math.random() * 5);
+        const nextStartEnabled = randomBool();
+        const nextStartValue = randomChoice(["A", "B", "C"]);
+        const nextEndEnabled = randomBool();
+        const nextEndValue = randomChoice(["A", "B", "C"]);
+
+        const updated = {
+            ...formData,
+            type: nextType,
+            patternString: nextPattern,
+            repeat: nextRepeat,
+            startEnabled: nextStartEnabled,
+            startValue: nextStartValue,
+            endEnabled: nextEndEnabled,
+            endValue: nextEndValue
+        };
+
+        if (nextType === "rastuci") {
+            updated.growA = randomBool();
+            updated.growB = randomBool();
+            updated.growC = randomBool();
+
+            if (!updated.growA && !updated.growB && !updated.growC) {
+                updated[randomChoice(["growA", "growB", "growC"])] = true;
+            }
+        } else {
+            updated.growA = false;
+            updated.growB = false;
+            updated.growC = false;
+        }
+
+        const sequence = window.buildSequence(updated);
+        updated.hiddenIndices = pickRandomHiddenIndices(sequence.length);
+
+        setFormData(updated);
+    }
 
     function savePattern() {
         if (!formData.name.trim()) {
@@ -349,6 +154,11 @@ function App() {
 
         if (!formData.patternString.trim()) {
             alert("Zadaj vzor.");
+            return;
+        }
+
+        if (!/^[ABC]+$/.test(formData.patternString)) {
+            alert("Vzor môže obsahovať iba písmená A, B, C.");
             return;
         }
 
@@ -365,12 +175,16 @@ function App() {
             ]);
         }
 
-        setFormData(emptyForm);
+        setFormData(window.EMPTY_FORM);
         setShowForm(false);
     }
 
     function editPattern(pattern) {
-        setFormData(pattern);
+        setFormData({
+            ...window.EMPTY_FORM,
+            ...pattern,
+            hiddenIndices: Array.isArray(pattern.hiddenIndices) ? pattern.hiddenIndices : []
+        });
         setShowForm(true);
     }
 
@@ -378,17 +192,48 @@ function App() {
         setPatterns(patterns.filter((p) => p.id !== id));
     }
 
-    /* ---------------- UI ---------------- */
+    function handleLoadClick() {
+        const input = document.getElementById("jsonFileInput");
+        if (input) {
+            input.click();
+        }
+    }
 
-    return (
+    function handleLoadFile(e) {
+        const file = e.target.files[0];
+
+        window.loadPatternsFromJSON(
+            file,
+            (imported) => {
+                setPatterns(imported);
+                e.target.value = "";
+            },
+            () => {
+                alert("Chyba: súbor nie je platný JSON.");
+                e.target.value = "";
+            }
+        );
+    }
+
+    function handleSaveJSON() {
+        const inputName = prompt("Zadaj názov JSON súboru:", "zadania");
+        if (inputName === null) return;
+
+        const trimmed = inputName.trim();
+        const finalName = trimmed ? trimmed : "zadania";
+
+        window.savePatternsToJSON(patterns, finalName);
+    }
+
+    return html`
         <div className="container mt-3">
             <h3>Programovanie vzorov</h3>
 
             <div className="mb-3 d-flex gap-2">
                 <button
                     className="btn btn-dark"
-                    onClick={() => {
-                        setFormData(emptyForm);
+                    onClick=${() => {
+                        setFormData(window.EMPTY_FORM);
                         setShowForm(true);
                     }}
                 >
@@ -397,238 +242,57 @@ function App() {
 
                 <button
                     className="btn btn-success"
-                    onClick={saveToJSON}
+                    onClick=${handleSaveJSON}
                 >
                     💾 Ulož
                 </button>
 
                 <button
                     className="btn btn-primary"
-                    onClick={() => fileLoadRef.current.click()}
+                    onClick=${handleLoadClick}
                 >
                     📂 Načítaj
                 </button>
 
                 <button
                     className="btn btn-warning"
-                    onClick={exportHTML}
+                    onClick=${() => window.exportPatternsToHTML(patterns)}
                 >
                     🌍 Export
                 </button>
 
                 <input
+                    id="jsonFileInput"
                     type="file"
-                    ref={fileLoadRef}
-                    style={{ display: "none" }}
-                    onChange={loadFromJSON}
+                    style=${{ display: "none" }}
+                    onChange=${handleLoadFile}
                     accept=".json,application/json"
                 />
             </div>
 
-            {showForm && (
-                <div className="card p-3 mb-4">
-                    <h5>
-                        {formData.id ? "Editácia" : "Nové zadanie"}
-                    </h5>
+            ${showForm && html`
+                <${window.PatternForm}
+                    formData=${formData}
+                    fileRefs=${fileRefs}
+                    onChange=${handleChange}
+                    onImageChange=${handleImage}
+                    onSave=${savePattern}
+                    onRandomize=${randomizeForm}
+                    onToggleHidden=${toggleHiddenIndex}
+                    preview=${window.generatePreview(formData, toggleHiddenIndex)}
+                />
+            `}
 
-                    <div className="d-flex gap-3 mb-3">
-                        <div>
-                            <label>Názov</label>
-                            <input
-                                className="form-control"
-                                name="name"
-                                value={formData.name}
-                                onChange={handleChange}
-                            />
-                        </div>
-
-                        <div>
-                            <label>Vzor</label>
-                            <input
-                                className="form-control"
-                                name="patternString"
-                                value={formData.patternString}
-                                onChange={handleChange}
-                                style={{ width: "120px" }}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="d-flex gap-5 mb-3">
-                        {["A", "B", "C"].map((letter) => (
-                            <div key={letter}>
-                                <strong>{letter}</strong>
-                                <br />
-
-                                <button
-                                    type="button"
-                                    className="btn btn-sm btn-secondary mt-1"
-                                    onClick={() => fileRefs[letter].current.click()}
-                                >
-                                    Prehliadať
-                                </button>
-
-                                <input
-                                    type="file"
-                                    ref={fileRefs[letter]}
-                                    style={{ display: "none" }}
-                                    accept="image/*"
-                                    onChange={(e) =>
-                                        handleImage(e, "image" + letter)
-                                    }
-                                />
-
-                                {formData["image" + letter] && (
-                                    <img
-                                        src={formData["image" + letter]}
-                                        alt={letter}
-                                        style={{
-                                            height: "50px",
-                                            display: "block",
-                                            marginTop: "8px"
-                                        }}
-                                    />
-                                )}
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="d-flex gap-4 mb-3">
-                        <div>
-                            <label>Počet opakovaní</label>
-                            <input
-                                type="number"
-                                name="repeat"
-                                value={formData.repeat}
-                                onChange={handleChange}
-                                className="form-control"
-                                min="1"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="mb-2">
-                        <input
-                            type="checkbox"
-                            name="startEnabled"
-                            checked={formData.startEnabled}
-                            onChange={handleChange}
-                        />{" "}
-                        Navyše na začiatku
-
-                        {formData.startEnabled && (
-                            <select
-                                name="startValue"
-                                value={formData.startValue}
-                                onChange={handleChange}
-                                className="form-select mt-1"
-                                style={{ width: "120px" }}
-                            >
-                                <option value="A">A</option>
-                                <option value="B">B</option>
-                                <option value="C">C</option>
-                            </select>
-                        )}
-                    </div>
-
-                    <div className="mb-3">
-                        <input
-                            type="checkbox"
-                            name="endEnabled"
-                            checked={formData.endEnabled}
-                            onChange={handleChange}
-                        />{" "}
-                        Navyše na konci
-
-                        {formData.endEnabled && (
-                            <select
-                                name="endValue"
-                                value={formData.endValue}
-                                onChange={handleChange}
-                                className="form-select mt-1"
-                                style={{ width: "120px" }}
-                            >
-                                <option value="A">A</option>
-                                <option value="B">B</option>
-                                <option value="C">C</option>
-                            </select>
-                        )}
-                    </div>
-
-                    <h6>Náhľad</h6>
-
-                    <div className="border p-3 mb-3 d-flex flex-wrap">
-                        {generatePreview(formData)}
-                    </div>
-
-                    <button
-                        className="btn btn-success"
-                        onClick={savePattern}
-                    >
-                        Uložiť
-                    </button>
-                </div>
-            )}
-
-            <div ref={listRef}>
-                {patterns.map((pattern, index) => (
-                    <div
-                        key={pattern.id}
-                        className="sortable-item"
-                        style={{
-                            display: "flex",
-                            alignItems: "flex-start",
-                            marginBottom: "10px"
-                        }}
-                    >
-                        <div
-                            style={{
-                                width: "30px",
-                                textAlign: "right",
-                                marginRight: "10px",
-                                fontWeight: "bold",
-                                paddingTop: "12px",
-                                userSelect: "none"
-                            }}
-                        >
-                            {index + 1}.
-                        </div>
-
-                        <div
-                            className="card p-3 flex-grow-1 drag-handle"
-                            style={{ cursor: "grab" }}
-                        >
-                            <div className="d-flex justify-content-between">
-                                <strong>{pattern.name}</strong>
-
-                                <div>
-                                    <button
-                                        className="btn btn-sm btn-warning me-2"
-                                        onClick={() => editPattern(pattern)}
-                                    >
-                                        ✏
-                                    </button>
-
-                                    <button
-                                        className="btn btn-sm btn-danger"
-                                        onClick={() => deletePattern(pattern.id)}
-                                    >
-                                        🗑
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="mt-2 d-flex flex-wrap">
-                                {generatePreview(pattern)}
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+            <${window.PatternList}
+                patterns=${patterns}
+                listRef=${listRef}
+                onEdit=${editPattern}
+                onDelete=${deletePattern}
+            />
         </div>
-    );
+    `;
 }
 
 ReactDOM
     .createRoot(document.getElementById("root"))
-    .render(<App />);
+    .render(html`<${App} />`);
